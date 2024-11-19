@@ -1,0 +1,170 @@
+import tkinter as tk
+from PIL import Image, ImageTk
+import requests
+from io import BytesIO
+import random
+
+class DotConnectGame:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Dot Connect Game")
+
+        # Highest level reached tracking
+        self.highest_level = 1
+
+        # Main window setup
+        self.main_frame = tk.Frame(root)
+        self.main_frame.pack()
+
+        # Load image from URL and display it on the first page
+        self.image_url = "https://www.id3ntitycrisis.com/dot-connect/images/dot-connect-game-1"
+        self.load_image()
+
+        self.title_label = tk.Label(self.main_frame, text="Welcome to Dot Connect Game", font=("Arial", 16))
+        self.title_label.pack(pady=10)
+
+        self.high_level_label = tk.Label(self.main_frame, text=f"Highest Level Reached: {self.highest_level}")
+        self.high_level_label.pack(pady=5)
+
+        self.start_button = tk.Button(self.main_frame, text="Start Game", command=self.start_game)
+        self.start_button.pack(pady=10)
+
+        # Game window setup (hidden initially)
+        self.game_window = None
+        self.level = 1
+        self.max_level = 5
+        self.dots = []
+        self.lines = []
+        self.prev_dot = None
+        self.sequence = []
+        self.current_dot_index = 0
+
+    def load_image(self):
+        # Download the image
+        response = requests.get(self.image_url)
+        img_data = response.content
+        img = Image.open(BytesIO(img_data))
+
+        # Resize image to fit in the Tkinter window
+        img = img.resize((400, 300))  # Adjust the size as needed
+
+        # Convert the image to a Tkinter-compatible photo
+        self.img_tk = ImageTk.PhotoImage(img)
+
+        # Display the image
+        self.image_label = tk.Label(self.main_frame, image=self.img_tk)
+        self.image_label.pack()
+
+    def start_game(self):
+        self.main_frame.pack_forget()  # Hide the main window frame
+        self.open_game_window()  # Open the game window
+
+    def open_game_window(self):
+        self.game_window = tk.Toplevel(self.root)
+        self.game_window.title("Dot Connect Game")
+
+        # Icons for back to main menu and restart
+        icon_frame = tk.Frame(self.game_window, bg="lightgray")
+        icon_frame.pack(side=tk.TOP, fill=tk.X)
+
+        back_button = tk.Button(icon_frame, text="⬅ Back", command=self.back_to_main)
+        back_button.pack(side=tk.LEFT, padx=10, pady=10)
+
+        restart_button = tk.Button(icon_frame, text="⟳ Restart", command=self.restart_game)
+        restart_button.pack(side=tk.RIGHT, padx=10, pady=10)
+
+        # Canvas for the game itself
+        self.canvas = tk.Canvas(self.game_window, width=400, height=400, bg="lightblue")
+        self.canvas.pack()
+
+        self.level_label = tk.Label(self.game_window, text=f"Level: {self.level}")
+        self.level_label.pack()
+
+        self.message_label = tk.Label(self.game_window, text="")
+        self.message_label.pack()
+
+        self.canvas.bind("<Button-1>", self.on_click)
+        self.start_level()
+
+    def start_level(self):
+        # Reset canvas and variables
+        self.canvas.delete("all")
+        self.dots = []
+        self.lines = []
+        self.prev_dot = None
+        self.sequence = []
+        self.current_dot_index = 0
+        self.message_label.config(text="")
+
+        # Generate dots for the current level
+        self.create_dots(self.level * 2 + 3)
+        self.level_label.config(text=f"Level: {self.level}")
+        random.shuffle(self.sequence)  # Shuffle to make the sequence random
+
+    def create_dots(self, num_dots):
+        for i in range(num_dots):
+            x = random.randint(50, 350)
+            y = random.randint(50, 350)
+            if i == 0:
+                # Starting dot (no color change, keeps black)
+                dot = self.canvas.create_oval(x - 15, y - 15, x + 15, y + 15, fill="black")  # Black starting dot
+            else:
+                # Other dots (all black)
+                dot = self.canvas.create_oval(x - 15, y - 15, x + 15, y + 15, fill="black")  # Black dots
+            self.dots.append((dot, x, y))
+            self.sequence.append((dot, x, y))  # Store the correct order
+
+    def on_click(self, event):
+        clicked_dot = self.find_dot(event.x, event.y)
+        if clicked_dot:
+            if clicked_dot == self.sequence[self.current_dot_index]:
+                if self.prev_dot:
+                    self.draw_line(self.prev_dot, clicked_dot)
+                self.prev_dot = clicked_dot
+                self.current_dot_index += 1
+
+                if self.current_dot_index == len(self.sequence):
+                    self.level_up()
+            else:
+                self.message_label.config(text="Wrong dot! Try again.", fg="red")
+
+    def find_dot(self, x, y):
+        for (dot, dx, dy) in self.dots:
+            if (dx - 20 < x < dx + 20) and (dy - 20 < y < dy + 20):
+                return (dot, dx, dy)
+        return None
+
+    def draw_line(self, dot1, dot2):
+        x1, y1 = dot1[1], dot1[2]
+        x2, y2 = dot2[1], dot2[2]
+        line = self.canvas.create_line(x1, y1, x2, y2, fill="white", width=3)  # White line
+        self.lines.append(line)
+
+    def level_up(self):
+        if self.level < self.max_level:
+            self.level += 1
+            self.start_level()
+        else:
+            self.message_label.config(text="You completed all levels! Well done!", fg="green")
+            self.canvas.unbind("<Button-1>")  # Stop the game
+
+        # Update the highest level reached if applicable
+        if self.level > self.highest_level:
+            self.highest_level = self.level
+            self.high_level_label.config(text=f"Highest Level Reached: {self.highest_level}")
+
+    def back_to_main(self):
+        # Close the game window and show the main window again
+        self.game_window.destroy()
+        self.main_frame.pack()
+
+    def restart_game(self):
+        # Restart the current level
+        self.level = 1
+        self.start_level()
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    game = DotConnectGame(root)
+    root.mainloop()
